@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Station Météo - Données en temps réel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+            background-color: #f0f8ff;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .data {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e6f7ff;
+            border-radius: 5px;
+        }
+        .data p {
+            margin: 10px 0;
+            font-size: 18px;
+        }
+        .last-update {
+            font-style: italic;
+            color: #666;
+        }
+        .chart {
+            margin: 20px 0;
+            width: 100%;
+            height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌤️ Station Météo - Données en temps réel</h1>
+
+        <div class="data">
+            <p>Température: <span id="temperature">-- °C</span></p>
+            <p>Humidité: <span id="humidity">-- %</span></p>
+            <p>Pression: <span id="pressure">-- hPa</span></p>
+            <p class="last-update">Dernière mise à jour: <span id="last-update">--</span></p>
+        </div>
+
+        <!-- Graphiques ThingSpeak (optionnel) -->
+        <div class="chart">
+            <iframe
+                width="100%"
+                height="300"
+                frameborder="0"
+                scrolling="no"
+                src="https://thingspeak.com/channels/TON_ID_DE_CANAL/charts/1?bgcolor=%23ffffff&color=%23d62020&dynamic=true&results=60&type=line">
+            </iframe>
+        </div>
+        <div class="chart">
+            <iframe
+                width="100%"
+                height="300"
+                frameborder="0"
+                scrolling="no"
+                src="https://thingspeak.com/channels/TON_ID_DE_CANAL/charts/2?bgcolor=%23ffffff&color=%23008000&dynamic=true&results=60&type=line">
+            </iframe>
+        </div>
+        <div class="chart">
+            <iframe
+                width="100%"
+                height="300"
+                frameborder="0"
+                scrolling="no"
+                src="https://thingspeak.com/channels/TON_ID_DE_CANAL/charts/3?bgcolor=%23ffffff&color=%230000ff&dynamic=true&results=60&type=line">
+            </iframe>
+        </div>
+    </div>
+
+    <script>
+        // ID de ton canal ThingSpeak
+        const CHANNEL_ID = "TON_ID_DE_CANAL";
+        const READ_API_KEY = "TA_CLE_DE_LECTURE";  // Optionnel (si ton canal est privé)
+
+        // Fonction pour récupérer les dernières données
+        function fetchData() {
+            const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json?api_key=${READ_API_KEY}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    // Met à jour les données dans la page
+                    document.getElementById("temperature").textContent = `${data.field1} °C`;
+                    document.getElementById("humidity").textContent = `${data.field2} %`;
+                    document.getElementById("pressure").textContent = `${data.field3} hPa`;
+                    document.getElementById("last-update").textContent = data.created_at;
+                })
+                .catch(error => {
+                    console.error("Erreur:", error);
+                });
+        }
+
+        // Met à jour les données toutes les 30 secondes
+        fetchData();  // Première mise à jour
+        setInterval(fetchData, 30000);  // 30 secondes
+    </script>
+</body>
+</html>
