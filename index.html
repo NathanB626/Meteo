@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Station Météo - Données en temps réel</title>
+    <title>Station Météo - Graphiques personnalisés (36h)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
-            text-align: center;
             margin: 20px;
             background-color: #f0f8ff;
         }
         .container {
-            max-width: 600px;
+            max-width: 1000px;
             margin: 0 auto;
             padding: 20px;
             background-color: white;
@@ -20,96 +20,219 @@
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
         h1 {
+            text-align: center;
             color: #333;
         }
-        .data {
+        .chart-container {
             margin: 20px 0;
-            padding: 15px;
-            background-color: #e6f7ff;
-            border-radius: 5px;
-        }
-        .data p {
-            margin: 10px 0;
-            font-size: 18px;
+            height: 300px;
         }
         .last-update {
+            text-align: center;
             font-style: italic;
             color: #666;
-        }
-        .chart {
-            margin: 20px 0;
-            width: 100%;
-            height: 300px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🌤️ Station Météo - Données en temps réel</h1>
+        <h1>🌤️ Station Météo - Graphiques personnalisés (36h)</h1>
 
-        <div class="data">
-            <p>Température: <span id="temperature">-- °C</span></p>
-            <p>Humidité: <span id="humidity">-- %</span></p>
-            <p>Pression: <span id="pressure">-- hPa</span></p>
-            <p class="last-update">Dernière mise à jour: <span id="last-update">--</span></p>
+        <div class="chart-container">
+            <canvas id="temperatureChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="humidityChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="pressureChart"></canvas>
         </div>
 
-        <!-- Graphiques ThingSpeak (optionnel) -->
-        <div class="chart">
-            <iframe
-                width="100%"
-                height="300"
-                frameborder="0"
-                scrolling="no"
-                src="https://thingspeak.com/channels/TON_ID_DE_CANAL/charts/1?bgcolor=%23ffffff&color=%23d62020&dynamic=true&results=60&type=line">
-            </iframe>
-        </div>
-        <div class="chart">
-            <iframe
-                width="100%"
-                height="300"
-                frameborder="0"
-                scrolling="no"
-                src="https://thingspeak.com/channels/TON_ID_DE_CANAL/charts/2?bgcolor=%23ffffff&color=%23008000&dynamic=true&results=60&type=line">
-            </iframe>
-        </div>
-        <div class="chart">
-            <iframe
-                width="100%"
-                height="300"
-                frameborder="0"
-                scrolling="no"
-                src="https://thingspeak.com/channels/TON_ID_DE_CANAL/charts/3?bgcolor=%23ffffff&color=%230000ff&dynamic=true&results=60&type=line">
-            </iframe>
-        </div>
+        <p class="last-update">Dernière mise à jour: <span id="last-update-time">--</span></p>
     </div>
 
     <script>
-        // ID de ton canal ThingSpeak
+        // Configuration ThingSpeak
         const CHANNEL_ID = "3448620";
         const READ_API_KEY = "HVPX29I97P3P2R07";  // Optionnel (si ton canal est privé)
 
-        // Fonction pour récupérer les dernières données
-        function fetchData() {
-            const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds/last.json?api_key=${READ_API_KEY}`;
+        // Variables pour stocker les graphiques
+        let temperatureChart, humidityChart, pressureChart;
 
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    // Met à jour les données dans la page
-                    document.getElementById("temperature").textContent = `${data.field1} °C`;
-                    document.getElementById("humidity").textContent = `${data.field2} %`;
-                    document.getElementById("pressure").textContent = `${data.field3} hPa`;
-                    document.getElementById("last-update").textContent = data.created_at;
-                })
-                .catch(error => {
-                    console.error("Erreur:", error);
-                });
+        // Fonction pour récupérer les données depuis ThingSpeak
+        async function fetchData() {
+            // Récupère jusqu'à 1000 résultats (pour couvrir 36h même si les données sont envoyées en retard)
+            const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${READ_API_KEY}&results=1000`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.feeds;
+            } catch (error) {
+                console.error("Erreur lors de la récupération des données:", error);
+                return [];
+            }
         }
 
-        // Met à jour les données toutes les 30 secondes
-        fetchData();  // Première mise à jour
-        setInterval(fetchData, 60000*5);  // 1 minute * 5
+        // Fonction pour formater les données pour Chart.js (avec heure locale)
+        function formatData(feeds) {
+            // Filtre les entrées valides (avec des données) et convertit les timestamps en heure locale
+            const validFeeds = feeds.filter(feed => feed.field1 && feed.field2 && feed.field3);
+
+            // Filtre pour ne garder que les 36 dernières heures (en heure locale)
+            const now = new Date();
+            const thirtySixHoursAgo = new Date(now.getTime() - 36 * 60 * 60 * 1000); // 36h en arrière
+
+            const filteredFeeds = validFeeds.filter(feed => {
+                const feedDate = new Date(feed.created_at);
+                return feedDate >= thirtySixHoursAgo;
+            });
+
+            // Trie par date (au cas où les données ne seraient pas dans l'ordre)
+            filteredFeeds.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+            // Extrait les timestamps en heure locale et les valeurs
+            const timestamps = filteredFeeds.map(feed => {
+                return new Date(feed.created_at).toLocaleString(); // Heure locale
+            });
+            const temperatures = filteredFeeds.map(feed => parseFloat(feed.field1));
+            const humidities = filteredFeeds.map(feed => parseFloat(feed.field2));
+            const pressures = filteredFeeds.map(feed => parseFloat(feed.field3));
+
+            return { timestamps, temperatures, humidities, pressures };
+        }
+
+        // Fonction pour créer ou mettre à jour les graphiques
+        function updateCharts(timestamps, temperatures, humidities, pressures) {
+            // Met à jour l'heure de la dernière mise à jour
+            document.getElementById("last-update-time").textContent = new Date().toLocaleString();
+
+            // Crée ou met à jour le graphique de température
+            const tempCtx = document.getElementById('temperatureChart').getContext('2d');
+            if (temperatureChart) {
+                temperatureChart.destroy();
+            }
+            temperatureChart = new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [{
+                        label: 'Température (°C)',
+                        data: temperatures,
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Température (°C)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Heure (locale)'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Crée ou met à jour le graphique d'humidité
+            const humidityCtx = document.getElementById('humidityChart').getContext('2d');
+            if (humidityChart) {
+                humidityChart.destroy();
+            }
+            humidityChart = new Chart(humidityCtx, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [{
+                        label: 'Humidité (%)',
+                        data: humidities,
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Humidité (%)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Heure (locale)'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Crée ou met à jour le graphique de pression
+            const pressureCtx = document.getElementById('pressureChart').getContext('2d');
+            if (pressureChart) {
+                pressureChart.destroy();
+            }
+            pressureChart = new Chart(pressureCtx, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [{
+                        label: 'Pression (hPa)',
+                        data: pressures,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Pression (hPa)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Heure (locale)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Fonction principale pour récupérer et afficher les données
+        async function updateData() {
+            const feeds = await fetchData();
+            if (feeds.length > 0) {
+                const { timestamps, temperatures, humidities, pressures } = formatData(feeds);
+                updateCharts(timestamps, temperatures, humidities, pressures);
+            }
+        }
+
+        // Met à jour les données toutes les 5 minutes (300 000 ms)
+        updateData();  // Première mise à jour
+        setInterval(updateData, 300000);
     </script>
 </body>
 </html>
