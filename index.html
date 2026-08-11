@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Station Météo - Graphiques personnalisés (36h)</title>
+    <title>Météo - L'Isle Adam</title>
+    <link rel="shortcut icon" href="rainy_showery_rain_cloud_sun_weather_icon_148919.ico"/>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -12,31 +13,50 @@
             background-color: #f0f8ff;
         }
         .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             max-width: 1000px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
         h1 {
             text-align: center;
             color: #333;
         }
         .chart-container {
-            margin: 20px 0;
-            height: 300px;
+            width: 90%;
+            margin: 10px 0;
         }
         .last-update {
             text-align: center;
             font-style: italic;
             color: #666;
         }
+        .summary {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e6f7ff;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .summary p {
+            margin: 8px 0;
+            font-size: 18px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🌤️ Station Météo - Graphiques personnalisés (36h)</h1>
+        <h1>🌤️ Météo - L'Isle Adam</h1>
+        <div class="summary">
+            <h2>Dernière mesure :</h2>
+            <p>Température : <span id="current-temp">-- °C</span></p>
+            <p>Point de rosée : <span id="current-dewpoint">-- °C</span></p>
+            <p>Humidité : <span id="current-humidity">-- %</span></p>
+            <p>Pression : <span id="current-pressure">-- hPa</span></p>
+            <p>Heure : <span id="current-time">--</span></p>
+        </div>
 
         <div class="chart-container">
             <canvas id="temperatureChart"></canvas>
@@ -75,25 +95,40 @@
 
         // Fonction pour formater les données pour Chart.js (avec heure locale)
         function formatData(feeds) {
-            // Filtre les entrées valides (avec des données) et convertit les timestamps en heure locale
-            const validFeeds = feeds.filter(feed => feed.field1 && feed.field2 && feed.field3);
+            // Filtre les entrées valides (avec des données)
+            const validFeeds = feeds.filter(feed =>
+                feed.field1 !== null &&
+                feed.field2 !== null &&
+                feed.field3 !== null &&
+                !isNaN(parseFloat(feed.field1)) &&
+                !isNaN(parseFloat(feed.field2)) &&
+                !isNaN(parseFloat(feed.field3))
+            );
 
-            // Filtre pour ne garder que les 36 dernières heures (en heure locale)
+            // Calcule la date limite (36h en arrière) en UTC
             const now = new Date();
-            const thirtySixHoursAgo = new Date(now.getTime() - 36 * 60 * 60 * 1000); // 36h en arrière
+            const thirtySixHoursAgo = new Date(now.getTime() - 36 * 60 * 60 * 1000);
 
+            // Filtre les données en comparant les timestamps UTC
             const filteredFeeds = validFeeds.filter(feed => {
                 const feedDate = new Date(feed.created_at);
-                return feedDate >= thirtySixHoursAgo;
+                // Vérifie que le timestamp est valide et dans les 36h
+                return !isNaN(feedDate.getTime()) && feedDate >= thirtySixHoursAgo;
             });
 
-            // Trie par date (au cas où les données ne seraient pas dans l'ordre)
+            // Trie les données par date (au cas où)
             filteredFeeds.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-            // Extrait les timestamps en heure locale et les valeurs
+            // Formate les timestamps en "MM/JJ HH:MM" (heure locale)
             const timestamps = filteredFeeds.map(feed => {
-                return new Date(feed.created_at).toLocaleString(); // Heure locale
+                const date = new Date(feed.created_at);
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                return `${month}/${day} ${hours}:${minutes}`;
             });
+
             const temperatures = filteredFeeds.map(feed => parseFloat(feed.field1));
             const humidities = filteredFeeds.map(feed => parseFloat(feed.field2));
             const pressures = filteredFeeds.map(feed => parseFloat(feed.field3));
@@ -103,123 +138,55 @@
 
         // Fonction pour créer ou mettre à jour les graphiques
         function updateCharts(timestamps, temperatures, humidities, pressures) {
-            // Met à jour l'heure de la dernière mise à jour
-            document.getElementById("last-update-time").textContent = new Date().toLocaleString();
+        const T = temperatures[temperatures.length - 1]
+        const h = humidities[humidities.length - 1]
+        const a = 17.27
+        const b = 237.7
+        const alpha = (a * T) / (b + T) + Math.log (h/100)
+        const dewpoint = Math.round ((b * alpha) / (a - alpha) * 10) / 10
+        const p = pressures[pressures.length - 1]
+        const time = timestamps[timestamps.length - 1]
 
-            // Crée ou met à jour le graphique de température
-            const tempCtx = document.getElementById('temperatureChart').getContext('2d');
-            if (temperatureChart) {
-                temperatureChart.destroy();
-            }
-            temperatureChart = new Chart(tempCtx, {
-                type: 'line',
-                data: {
-                    labels: timestamps,
-                    datasets: [{
-                        label: 'Température (°C)',
-                        data: temperatures,
-                        borderColor: 'rgb(255, 99, 132)',
-                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                        tension: 0.1,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: false,
-                            title: {
-                                display: true,
-                                text: 'Température (°C)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Heure (locale)'
-                            }
-                        }
-                    }
-                }
-            });
+        // Met à jour l'heure de la dernière mise à jour
+        document.getElementById("last-update-time").textContent = new Date().toLocaleString();
 
-            // Crée ou met à jour le graphique d'humidité
-            const humidityCtx = document.getElementById('humidityChart').getContext('2d');
-            if (humidityChart) {
-                humidityChart.destroy();
-            }
-            humidityChart = new Chart(humidityCtx, {
-                type: 'line',
-                data: {
-                    labels: timestamps,
-                    datasets: [{
-                        label: 'Humidité (%)',
-                        data: humidities,
-                        borderColor: 'rgb(54, 162, 235)',
-                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                        tension: 0.1,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: false,
-                            title: {
-                                display: true,
-                                text: 'Humidité (%)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Heure (locale)'
-                            }
-                        }
-                    }
-                }
-            });
-
-            // Crée ou met à jour le graphique de pression
-            const pressureCtx = document.getElementById('pressureChart').getContext('2d');
-            if (pressureChart) {
-                pressureChart.destroy();
-            }
-            pressureChart = new Chart(pressureCtx, {
-                type: 'line',
-                data: {
-                    labels: timestamps,
-                    datasets: [{
-                        label: 'Pression (hPa)',
-                        data: pressures,
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        tension: 0.1,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: false,
-                            title: {
-                                display: true,
-                                text: 'Pression (hPa)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Heure (locale)'
-                            }
-                        }
-                    }
-                }
-            });
+        // Affiche les dernières mesures dans le récapitulatif
+        if (temperatures.length > 0) {
+            document.getElementById("current-temp").textContent = `${T} °C`;
+            document.getElementById("current-dewpoint").textContent = `${dewpoint} °C`;
+            document.getElementById("current-humidity").textContent = `${h} %`;
+            document.getElementById("current-pressure").textContent = `${p} hPa`;
+            document.getElementById("current-time").textContent = time;
         }
+
+        // Crée ou met à jour le graphique de température
+        const tempCtx = document.getElementById('temperatureChart').getContext('2d');
+        if (temperatureChart) temperatureChart.destroy();
+        temperatureChart = new Chart(tempCtx, {
+            type: 'line',
+            data: { labels: timestamps, datasets: [{ label: 'Température (°C)', data: temperatures, borderColor: 'rgb(214, 2, 112)', backgroundColor: 'rgba(255, 99, 132, 0.2)', tension: 0.1, fill: true }] },
+            options: { responsive: true, scales: { y: { beginAtZero: false, min: Math.round (Math.min (15, ...temperatures) - 5), max: Math.round (Math.max (20, ...temperatures) + 5 )}, x: { title: { display: true, text: 'Heure (locale)' } } } }
+        });
+
+        // Crée ou met à jour le graphique d'humidité
+        const humidityCtx = document.getElementById('humidityChart').getContext('2d');
+        if (humidityChart) humidityChart.destroy();
+        humidityChart = new Chart(humidityCtx, {
+            type: 'line',
+            data: { labels: timestamps, datasets: [{ label: 'Humidité (%)', data: humidities, borderColor: 'rgb(155, 79, 150)', backgroundColor: 'rgba(54, 162, 235, 0.2)', tension: 0.1, fill: true }] },
+            options: { responsive: true, scales: { y: { beginAtZero: false, min: 0, max: 100 }, x: { title: { display: true, text: 'Heure (locale)' } } } }
+        });
+
+        // Crée ou met à jour le graphique de pression
+        const pressureCtx = document.getElementById('pressureChart').getContext('2d');
+        if (pressureChart) pressureChart.destroy();
+        pressureChart = new Chart(pressureCtx, {
+            type: 'line',
+            data: { labels: timestamps, datasets: [{ label: 'Pression (hPa)', data: pressures, borderColor: 'rgb(0, 56, 168)', backgroundColor: 'rgba(75, 192, 192, 0.2)', tension: 0.1, fill: true }] },
+            options: { responsive: true, scales: { y: { beginAtZero: false , min: Math.round (Math.min (1010, ...pressures) - 5), max: Math.round (Math.max (1010, ...pressures) + 5) }, x: { title: { display: true, text: 'Heure (locale)' } } } }
+        });
+    }
+
 
         // Fonction principale pour récupérer et afficher les données
         async function updateData() {
@@ -232,7 +199,7 @@
 
         // Met à jour les données toutes les 5 minutes (300 000 ms)
         updateData();  // Première mise à jour
-        setInterval(updateData, 300000);
+        setInterval(updateData, 600000);
     </script>
 </body>
 </html>
