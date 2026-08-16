@@ -206,7 +206,7 @@
         // Fonction principale pour récupérer et afficher les données
         async function updateData() {
             const feeds = await fetchData();
-            if (feeds.length >= 0) {
+            if (feeds.length > 0) {
                 const { timestamps, temperatures, humidities, pressures, last_measurement_formatted } = formatData(feeds);
                 console.log ('u : ', last_measurement_formatted)
                 updateCharts(timestamps, temperatures, humidities, pressures, last_measurement_formatted);
