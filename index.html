@@ -107,7 +107,15 @@
 
             // Calcule la date limite (36h en arrière) en UTC
             const now = new Date();
-            const thirtySixHoursAgo = new Date(now.getTime() - 36 * 60 * 60 * 1000);
+            const thirtySixHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+            const last_measurement = new Date(feeds[feeds.length - 1].created_at);
+            const month = String(last_measurement.getMonth() + 1).padStart(2, '0');
+            const day = String(last_measurement.getDate()).padStart(2, '0');
+            const hours = String(last_measurement.getHours()).padStart(2, '0');
+            const minutes = String(last_measurement.getMinutes()).padStart(2, '0');
+            const last_measurement_formatted = String (`${day}/${month} ${hours}:${minutes}`);
+
+            console.log ('last_measurement_formatted : ', last_measurement_formatted);
 
             // Filtre les données en comparant les timestamps UTC
             const filteredFeeds = validFeeds.filter(feed => {
@@ -126,18 +134,19 @@
                 const day = String(date.getDate()).padStart(2, '0');
                 const hours = String(date.getHours()).padStart(2, '0');
                 const minutes = String(date.getMinutes()).padStart(2, '0');
-                return `${month}/${day} ${hours}:${minutes}`;
+                return `${day}/${month} ${hours}:${minutes}`;
             });
 
             const temperatures = filteredFeeds.map(feed => parseFloat(feed.field1));
             const humidities = filteredFeeds.map(feed => parseFloat(feed.field2));
             const pressures = filteredFeeds.map(feed => parseFloat(feed.field3));
-
-            return { timestamps, temperatures, humidities, pressures };
+            
+            console.log ('before return : ', last_measurement_formatted)
+            return { timestamps, temperatures, humidities, pressures, last_measurement_formatted };
         }
 
         // Fonction pour créer ou mettre à jour les graphiques
-        function updateCharts(timestamps, temperatures, humidities, pressures) {
+        function updateCharts(timestamps, temperatures, humidities, pressures, l_time) {
         const T = temperatures[temperatures.length - 1]
         const h = humidities[humidities.length - 1]
         const a = 17.27
@@ -145,7 +154,6 @@
         const alpha = (a * T) / (b + T) + Math.log (h/100)
         const dewpoint = Math.round ((b * alpha) / (a - alpha) * 10) / 10
         const p = pressures[pressures.length - 1]
-        const time = timestamps[timestamps.length - 1]
 
         // Met à jour l'heure de la dernière mise à jour
         document.getElementById("last-update-time").textContent = new Date().toLocaleString();
@@ -156,9 +164,16 @@
             document.getElementById("current-dewpoint").textContent = `${dewpoint} °C`;
             document.getElementById("current-humidity").textContent = `${h} %`;
             document.getElementById("current-pressure").textContent = `${p} hPa`;
-            document.getElementById("current-time").textContent = time;
         }
-
+        else {
+            document.getElementById("current-temp").textContent = `-- °C`;
+            document.getElementById("current-dewpoint").textContent = `-- °C`;
+            document.getElementById("current-humidity").textContent = `-- %`;
+            document.getElementById("current-pressure").textContent = `-- hPa`;
+        }
+        
+        console.log (l_time)
+        document.getElementById("current-time").textContent = `${l_time}`;
         // Crée ou met à jour le graphique de température
         const tempCtx = document.getElementById('temperatureChart').getContext('2d');
         if (temperatureChart) temperatureChart.destroy();
@@ -191,9 +206,10 @@
         // Fonction principale pour récupérer et afficher les données
         async function updateData() {
             const feeds = await fetchData();
-            if (feeds.length > 0) {
-                const { timestamps, temperatures, humidities, pressures } = formatData(feeds);
-                updateCharts(timestamps, temperatures, humidities, pressures);
+            if (feeds.length >= 0) {
+                const { timestamps, temperatures, humidities, pressures, last_measurement_formatted } = formatData(feeds);
+                console.log ('u : ', last_measurement_formatted)
+                updateCharts(timestamps, temperatures, humidities, pressures, last_measurement_formatted);
             }
         }
 
